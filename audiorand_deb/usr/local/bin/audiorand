@@ -171,7 +171,7 @@ class AudioTrayApp:
 
 class AudioManagerWindow(Gtk.Window):
     def __init__(self, app_ref):
-        super().__init__(title="Audiorand — Manage Audio Files")
+        super().__init__(title="AudioRand — Manage Audio Files")
         self.set_default_size(600, 400)
         self.app_ref = app_ref
         self.data = app_ref.data
