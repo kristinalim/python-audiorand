@@ -12,14 +12,11 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import Gtk, AppIndicator3
 
-# Initialize pygame mixer for audio playback
 pygame.mixer.init()
 
-# Constants and file locations
 DATA_FILE = os.path.expanduser("~/.audiorand_data.json")
 VALID_CATEGORY_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789():;- ,./"
 
-# Load and save data from JSON
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -34,11 +31,11 @@ def save_data(data):
 def validate_category(name):
     return all(c in VALID_CATEGORY_CHARS for c in name)
 
-# Main Tray Application
 class AudioTrayApp:
     def __init__(self):
         self.data = load_data()
         self.is_paused = False
+        self.current_audio = None
         self.indicator = AppIndicator3.Indicator.new(
             "audiorand",
             "media-playback-start",
@@ -50,16 +47,16 @@ class AudioTrayApp:
     def build_menu(self):
         menu = Gtk.Menu()
 
-        # Play Any
         self.play_any = Gtk.MenuItem(label="Play Any")
         self.play_any.connect("activate", self.on_play_any)
         menu.append(self.play_any)
 
-        # Play by Category
+        self.category_items = []
         for cat in sorted(self.data["categories"]):
             item = Gtk.MenuItem(label=f"Play {cat}")
             item.connect("activate", self.on_play_category, cat)
             menu.append(item)
+            self.category_items.append((item, cat))
 
         menu.append(Gtk.SeparatorMenuItem())
 
@@ -81,6 +78,10 @@ class AudioTrayApp:
         manage.connect("activate", self.show_manager)
         menu.append(manage)
 
+        manage_categories = Gtk.MenuItem(label="Manage Categories...")
+        manage_categories.connect("activate", self.show_categories)
+        menu.append(manage_categories)
+
         quit_item = Gtk.MenuItem(label="Quit")
         quit_item.connect("activate", Gtk.main_quit)
         menu.append(quit_item)
@@ -92,9 +93,11 @@ class AudioTrayApp:
     def update_menu_state(self):
         playing = pygame.mixer.music.get_busy()
         self.pause_item.set_sensitive(playing and not self.is_paused)
-        self.resume_item.set_sensitive(playing and self.is_paused)
+        self.resume_item.set_sensitive(self.is_paused)
         self.stop_item.set_sensitive(playing)
         self.play_any.set_sensitive(bool(self.data["audio_files"]))
+        for item, cat in self.category_items:
+            item.set_sensitive(any(cat in f["categories"] for f in self.data["audio_files"]))
 
     def play_file(self, path):
         if pygame.mixer.music.get_busy():
@@ -102,6 +105,7 @@ class AudioTrayApp:
         try:
             pygame.mixer.music.load(path)
             pygame.mixer.music.play()
+            self.current_audio = path
             self.is_paused = False
         except Exception as e:
             self.show_message(f"Failed to play {path}:\n{e}")
@@ -128,9 +132,10 @@ class AudioTrayApp:
         self.update_menu_state()
 
     def on_resume_audio(self, _):
-        pygame.mixer.music.unpause()
-        self.is_paused = False
-        self.update_menu_state()
+        if self.is_paused:
+            pygame.mixer.music.unpause()
+            self.is_paused = False
+            self.update_menu_state()
 
     def on_stop_audio(self, _):
         pygame.mixer.music.stop()
@@ -150,7 +155,9 @@ class AudioTrayApp:
     def show_manager(self, _):
         AudioManagerWindow(self)
 
-# Window to Manage Audio Files
+    def show_categories(self, _):
+        CategoryEditorWindow(self)
+
 class AudioManagerWindow(Gtk.Window):
     def __init__(self, app_ref):
         super().__init__(title="Audiorand — Manage Audio Files")
@@ -187,55 +194,44 @@ class AudioManagerWindow(Gtk.Window):
         del_btn.connect("clicked", self.on_delete_audio)
         btn_box.pack_start(del_btn, True, True, 0)
 
-        cat_btn = Gtk.Button(label="Edit Categories")
-        cat_btn.connect("clicked", self.on_edit_categories)
-        btn_box.pack_start(cat_btn, True, True, 0)
-
         self.show_all()
 
     def on_add_audio(self, _):
-        dialog = Gtk.FileChooserDialog(
-            title="Add Audio Files", parent=self,
-            action=Gtk.FileChooserAction.OPEN
-        )
-        dialog.set_select_multiple(True)
-        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                           Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        dialog = Gtk.Dialog(title="Add Audio File", parent=self)
+        content_area = dialog.get_content_area()
 
+        file_chooser = Gtk.FileChooserButton(title="Select Audio File")
         filter_audio = Gtk.FileFilter()
-        filter_audio.set_name("Audio")
+        filter_audio.set_name("Audio Files")
         filter_audio.add_pattern("*.mp3")
         filter_audio.add_pattern("*.wav")
-        dialog.add_filter(filter_audio)
+        file_chooser.add_filter(filter_audio)
+        content_area.pack_start(Gtk.Label(label="Audio File:"), False, False, 0)
+        content_area.pack_start(file_chooser, False, False, 0)
+
+        content_area.pack_start(Gtk.Label(label="Categories:"), False, False, 5)
+        self.checks = []
+        for cat in self.data["categories"]:
+            check = Gtk.CheckButton(label=cat)
+            self.checks.append(check)
+            content_area.pack_start(check, False, False, 0)
+
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                           Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        dialog.show_all()
 
         if dialog.run() == Gtk.ResponseType.OK:
-            selected_files = dialog.get_filenames()
-            dialog.destroy()
-            category_dialog = Gtk.Dialog(title="Assign Categories", parent=self, flags=0)
-            category_box = category_dialog.get_content_area()
-            category_box.add(Gtk.Label(label="Select categories for the new audio files:"))
-
-            category_checks = []
-            for cat in self.data["categories"]:
-                check = Gtk.CheckButton(label=cat)
-                category_checks.append(check)
-                category_box.add(check)
-
-            category_dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                        Gtk.STOCK_OK, Gtk.ResponseType.OK)
-            category_dialog.show_all()
-
-            if category_dialog.run() == Gtk.ResponseType.OK:
-                selected_categories = [c.get_label() for c in category_checks if c.get_active()]
-                for f in selected_files:
-                    if not any(e["path"] == f for e in self.data["audio_files"]):
-                        self.data["audio_files"].append({"path": f, "categories": selected_categories})
-                        self.store.append([f, ", ".join(selected_categories)])
+            selected_file = file_chooser.get_filename()
+            if not selected_file:
+                self.app_ref.show_message("You must select an audio file.")
+            elif not any(e["path"] == selected_file for e in self.data["audio_files"]):
+                selected_categories = [c.get_label() for c in self.checks if c.get_active()]
+                self.data["audio_files"].append({"path": selected_file, "categories": selected_categories})
+                self.store.append([selected_file, ", ".join(selected_categories)])
                 save_data(self.data)
+                self.app_ref.update_menu_state()
 
-            category_dialog.destroy()
-        else:
-            dialog.destroy()
+        dialog.destroy()
 
     def on_delete_audio(self, _):
         selection = self.tree.get_selection()
@@ -245,11 +241,8 @@ class AudioManagerWindow(Gtk.Window):
             self.data["audio_files"] = [f for f in self.data["audio_files"] if f["path"] != path]
             model.remove(treeiter)
             save_data(self.data)
+            self.app_ref.update_menu_state()
 
-    def on_edit_categories(self, _):
-        CategoryEditorWindow(self.app_ref)
-
-# Window to Manage Categories
 class CategoryEditorWindow(Gtk.Window):
     def __init__(self, app_ref):
         super().__init__(title="Edit Categories")
@@ -302,6 +295,7 @@ class CategoryEditorWindow(Gtk.Window):
                 self.data["categories"].append(name)
                 self.store.append([name])
                 save_data(self.data)
+                self.app_ref.update_menu_state()
         dialog.destroy()
 
     def on_delete(self, _):
@@ -315,8 +309,7 @@ class CategoryEditorWindow(Gtk.Window):
                     f["categories"].remove(cat)
             model.remove(treeiter)
             save_data(self.data)
-
-# Entry point
+            self.app_ref.update_menu_state()
 
 def main():
     AudioTrayApp()
