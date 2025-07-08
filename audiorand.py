@@ -51,9 +51,9 @@ class AudioTrayApp:
         menu = Gtk.Menu()
 
         # Play Any
-        play_any = Gtk.MenuItem(label="Play Any")
-        play_any.connect("activate", self.on_play_any)
-        menu.append(play_any)
+        self.play_any = Gtk.MenuItem(label="Play Any")
+        self.play_any.connect("activate", self.on_play_any)
+        menu.append(self.play_any)
 
         # Play by Category
         for cat in sorted(self.data["categories"]):
@@ -94,6 +94,7 @@ class AudioTrayApp:
         self.pause_item.set_sensitive(playing and not self.is_paused)
         self.resume_item.set_sensitive(playing and self.is_paused)
         self.stop_item.set_sensitive(playing)
+        self.play_any.set_sensitive(bool(self.data["audio_files"]))
 
     def play_file(self, path):
         if pygame.mixer.music.get_busy():
@@ -303,4 +304,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
