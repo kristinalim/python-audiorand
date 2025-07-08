@@ -15,8 +15,11 @@ from gi.repository import Gtk, AppIndicator3
 pygame.mixer.init()
 
 DATA_FILE = os.path.expanduser("~/.audiorand_data.json")
+ICON_DIR = os.path.expanduser("~/.local/share/audiorand/icons")
+ICON_IDLE = os.path.join(ICON_DIR, "audiorand-idle.png")
+ICON_PLAYING = os.path.join(ICON_DIR, "audiorand-playing.png")
+ICON_PAUSED = os.path.join(ICON_DIR, "audiorand-paused.png")
 VALID_CATEGORY_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789():;- ,./"
-
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -38,11 +41,15 @@ class AudioTrayApp:
         self.current_audio = None
         self.indicator = AppIndicator3.Indicator.new(
             "audiorand",
-            "media-playback-start",
+            ICON_IDLE,
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         self.indicator.set_menu(self.build_menu())
+
+    def set_icon(self, path):
+        if os.path.exists(path):
+            self.indicator.set_icon_full(path, "Audiorand")
 
     def build_menu(self):
         menu = Gtk.Menu()
@@ -98,6 +105,12 @@ class AudioTrayApp:
         self.play_any.set_sensitive(bool(self.data["audio_files"]))
         for item, cat in self.category_items:
             item.set_sensitive(any(cat in f["categories"] for f in self.data["audio_files"]))
+        if self.is_paused:
+            self.set_icon(ICON_PAUSED)
+        elif playing:
+            self.set_icon(ICON_PLAYING)
+        else:
+            self.set_icon(ICON_IDLE)
 
     def play_file(self, path):
         if pygame.mixer.music.get_busy():
