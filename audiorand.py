@@ -4,11 +4,13 @@ import gi
 import os
 import random
 from threading import Thread
-from playsound import playsound
+import pygame  # NEW: used instead of playsound
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import Gtk, AppIndicator3
+
+pygame.mixer.init()
 
 AUDIO_STORAGE_FILE = os.path.expanduser("~/.audiorand_files.txt")
 
@@ -134,6 +136,14 @@ class AudioTrayApp:
         play_item.connect("activate", self.on_play_random_audio)
         menu.append(play_item)
 
+        pause_item = Gtk.MenuItem(label="Pause/Resume Audio")
+        pause_item.connect("activate", self.on_pause_audio)
+        menu.append(pause_item)
+
+        stop_item = Gtk.MenuItem(label="Stop Audio")
+        stop_item.connect("activate", self.on_stop_audio)
+        menu.append(stop_item)
+
         quit_item = Gtk.MenuItem(label="Quit")
         quit_item.connect("activate", self.quit)
         menu.append(quit_item)
@@ -152,8 +162,29 @@ class AudioTrayApp:
         if not self.audio_files:
             self.show_message("No audio files available.")
             return
+
+        # Stop any existing playback
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+
         audio_file = random.choice(self.audio_files)
-        Thread(target=playsound, args=(audio_file,), daemon=True).start()
+        try:
+            pygame.mixer.music.load(audio_file)
+            pygame.mixer.music.play()
+        except Exception as e:
+            self.show_message(f"Failed to play audio:\n{e}")
+
+    def on_pause_audio(self, _):
+        if pygame.mixer.music.get_busy():
+            if pygame.mixer.music.get_pos() > 0:
+                if pygame.mixer.music.get_volume() > 0.0:
+                    pygame.mixer.music.pause()
+                else:
+                    pygame.mixer.music.unpause()
+
+    def on_stop_audio(self, _):
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
 
     def show_message(self, text):
         dialog = Gtk.MessageDialog(
