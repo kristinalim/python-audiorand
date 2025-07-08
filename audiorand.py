@@ -7,10 +7,9 @@ import random
 from threading import Thread
 import pygame
 
-# GTK and AppIndicator bindings
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
-from gi.repository import Gtk, AppIndicator3
+from gi.repository import Gtk, AppIndicator3, GLib
 
 pygame.mixer.init()
 
@@ -45,6 +44,8 @@ class AudioTrayApp:
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         self.indicator.set_menu(self.build_menu())
+        # Start polling for playback end
+        GLib.timeout_add(500, self.poll_playback)
 
     def set_icon(self, icon_name):
         self.indicator.set_icon(icon_name)
@@ -168,6 +169,13 @@ class AudioTrayApp:
 
     def show_categories(self, _):
         CategoryEditorWindow(self)
+
+    def poll_playback(self):
+        # Called periodically to check if playback has ended
+        playing = pygame.mixer.music.get_busy()
+        if not playing and not self.is_paused:
+            self.set_icon(ICON_IDLE)
+        return True  # Continue calling
 
 class AudioManagerWindow(Gtk.Window):
     def __init__(self, app_ref):
