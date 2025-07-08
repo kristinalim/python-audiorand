@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=AudioRand
+Exec=/usr/local/bin/audiorand
+Icon=audiorand-idle
+Comment=Play a random audio file from your system tray
+Categories=Utility;
+Terminal=false
