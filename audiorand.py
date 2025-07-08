@@ -209,13 +209,33 @@ class AudioManagerWindow(Gtk.Window):
         dialog.add_filter(filter_audio)
 
         if dialog.run() == Gtk.ResponseType.OK:
-            for f in dialog.get_filenames():
-                if not any(e["path"] == f for e in self.data["audio_files"]):
-                    self.data["audio_files"].append({"path": f, "categories": []})
-                    self.store.append([f, ""])
-            save_data(self.data)
+            selected_files = dialog.get_filenames()
+            dialog.destroy()
+            category_dialog = Gtk.Dialog(title="Assign Categories", parent=self, flags=0)
+            category_box = category_dialog.get_content_area()
+            category_box.add(Gtk.Label(label="Select categories for the new audio files:"))
 
-        dialog.destroy()
+            category_checks = []
+            for cat in self.data["categories"]:
+                check = Gtk.CheckButton(label=cat)
+                category_checks.append(check)
+                category_box.add(check)
+
+            category_dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                        Gtk.STOCK_OK, Gtk.ResponseType.OK)
+            category_dialog.show_all()
+
+            if category_dialog.run() == Gtk.ResponseType.OK:
+                selected_categories = [c.get_label() for c in category_checks if c.get_active()]
+                for f in selected_files:
+                    if not any(e["path"] == f for e in self.data["audio_files"]):
+                        self.data["audio_files"].append({"path": f, "categories": selected_categories})
+                        self.store.append([f, ", ".join(selected_categories)])
+                save_data(self.data)
+
+            category_dialog.destroy()
+        else:
+            dialog.destroy()
 
     def on_delete_audio(self, _):
         selection = self.tree.get_selection()
